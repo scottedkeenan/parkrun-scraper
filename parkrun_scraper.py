@@ -1,10 +1,17 @@
 import os
 import collections
+import csv
+from datetime import datetime
+from datetime import timedelta
+import logging
+
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.common.exceptions import ElementNotInteractableException
 from selenium.webdriver.support.ui import Select
-import csv
+
+LOGGER = logging.getLogger()
+logging.basicConfig(level=logging.INFO)
 
 
 def set_up_parkrun_dir():
@@ -39,7 +46,6 @@ def scrape_personal_results(driver, athelete_number):
 
     all_results_url = 'https://www.parkrun.org.uk/results/athleteeventresultshistory/?athleteNumber={}&eventNumber=0'
     driver.get(all_results_url.format(athelete_number))
-    # //tagname[@attribute=’Value‘]
     tables = driver.find_elements_by_xpath("//table[@id='results']")
     run_rows = []
     for table in tables:
@@ -85,9 +91,14 @@ def close_search_tip_modal(driver):
         pass
 
 
-def scrape_results_for_event(event_name, event_number, results_url):
+def scrape_results_for_event(event_name, results_url):
     set_up_parkrun_race_results_dir()
-    race_result_filename = '{}_{}.csv'.format(event_name.lower().replace(' ', '_'), event_number)
+    race_result_filename = '{}_{}.csv'.format(event_name.lower().replace(' ', '_'), results_url.split('runSeqNumber=')[1])
+
+    if os.path.exists(race_result_filename):
+        LOGGER.info('{} already exists!'.format(race_result_filename))
+        return
+
     with open('./parkrun/race_results/{}'.format(race_result_filename), 'w+') as race_result:
         race_result_writer = csv.writer(race_result)
         driver.get(results_url)
@@ -154,15 +165,60 @@ def scrape_new_race_results(driver):
         for result in personal_results_reader:
             race_result_filename = '{}_{}.csv'.format(result[0].lower().replace(' ', '_'), result[4])
             if not os.path.exists('./parkrun/race_results/{}'.format(race_result_filename)):
-                scrape_results_for_event(result[0], result[4], result[3])
+                scrape_results_for_event(result[0], result[3])
 
 
-def scrape_all_race_results(driver):
+def scrape_all_personal_race_results(driver):
     with open('./parkrun/personal_results.csv', 'r') as personal_results:
         personal_results_reader = csv.reader(personal_results)
         for result in personal_results_reader:
-            scrape_results_for_event(result[0], result[4], result[3])
+            scrape_results_for_event(result[0], result[3])
 
-driver = webdriver.Firefox()
-scrape_personal_results(driver,'1839227')
-# scrape_new_race_results(driver)
+
+def scrape_all_race_results_in_period(driver, event_name, start_date, end_date):
+    # Get start and end dates for year
+
+    start_date = datetime.strptime(start_date, '%d/%m/%Y')
+    end_date = datetime.strptime(end_date, '%d/%m/%Y')
+
+    if start_date.weekday() is not 5:
+        LOGGER.warning('Start date is not a Saturday, continuing...')
+    if end_date.weekday() is not 5:
+        LOGGER.warning('End date is not a Saturday, continuing...')
+
+    # Get dates of each Saturday in that period
+
+    saturdays = []
+    saturday_urls = []
+
+    # Weekday: Monday is 0 and Sunday is 6.
+    d = start_date + timedelta(days=5 - start_date.weekday())
+    saturdays.append(datetime.strftime(d, '%d/%m/%Y'))
+    if d < start_date:
+        logging.error('Back in time! {}'.format(d))
+    while d < end_date:
+        LOGGER.debug('Not end date yet')
+        d += timedelta(days=7)
+        saturdays.append(datetime.strftime(d, '%d/%m/%Y'))
+    LOGGER.debug(saturdays)
+
+    # open event results page
+
+    driver.get('https://www.parkrun.org.uk/{}/results/eventhistory/'.format(event_name))
+
+    # get all date elements first - quicker than searching DOM for dates
+    date_elements = driver.find_elements_by_xpath('//table/tbody/tr/td/div/a')
+
+    LOGGER.debug('Date elements: {}'.format(date_elements))
+
+    # for saturday in saturdays:
+    #     LOGGER.debug('Getting link for date {}'.format(saturday))
+    for elem in date_elements:
+        if elem.text in saturdays:
+            LOGGER.debug('Event found for date {}'.format(elem.text))
+            saturday_urls.append(elem.get_attribute('href'))
+
+    LOGGER.debug(saturday_urls)
+
+    for url in saturday_urls:
+        scrape_results_for_event(event_name, url)
