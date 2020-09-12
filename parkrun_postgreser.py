@@ -141,7 +141,7 @@ def update_event_race_results_postgres(cursor, event_name=''):
                 cursor.execute(insert_row_sql, insert_row_data)
 
 
-def get_overall_points_competition(cursor, event_name=''):
+def get_overall_points_competition(cursor, event_name, first_event, last_event):
 
     get_sql = """
         SELECT 	name, SUM(
@@ -149,13 +149,14 @@ def get_overall_points_competition(cursor, event_name=''):
         ELSE 0 END)
         AS points
         FROM race_results
-        WHERE event_name = 'doddingtonhall'
+        WHERE event_name = %s
+        AND event_number BETWEEN %s AND %s
         AND name != 'Unknown'
         GROUP BY name
-        ORDER BY points desc
+        ORDER BY points desc;
         """
 
-    result = cursor.execute(get_sql)
+    cursor.execute(get_sql, [event_name, first_event, last_event])
     return cursor.fetchall()
 
 conn = psycopg2.connect(user="postgres", password="postgres", host="172.19.0.3", dbname="parkrundb")
@@ -167,7 +168,7 @@ cursor = conn.cursor()
 # update_personal_race_results_postgres(cursor)
 # update_event_race_results_postgres(cursor, event_name='doddingtonhall')
 
-overall_points = get_overall_points_competition(cursor)
+overall_points = get_overall_points_competition(cursor, 'lincoln', 0, 318)
 
 for pos, runner in enumerate(overall_points):
     if pos > 99:
