@@ -91,11 +91,11 @@ def close_search_tip_modal(driver):
         pass
 
 
-def scrape_results_for_event(event_name, results_url):
+def scrape_results_for_event(driver, event_name, results_url):
     set_up_parkrun_race_results_dir()
-    race_result_filename = '{}_{}.csv'.format(event_name.lower().replace(' ', '_'), results_url.split('runSeqNumber=')[1])
+    race_result_filename = '{}_{}.csv'.format(event_name.lower().replace(' ', ''), results_url.split('runSeqNumber=')[1])
 
-    if os.path.exists(race_result_filename):
+    if os.path.exists('./parkrun/race_results/{}'.format(race_result_filename)):
         LOGGER.info('{} already exists!'.format(race_result_filename))
         return
 
@@ -106,7 +106,6 @@ def scrape_results_for_event(event_name, results_url):
         select = Select(driver.find_element_by_name('display'))
         select.select_by_visible_text('Detailed')
         rows = driver.find_elements_by_xpath('//table/tbody/tr[*]')
-        print(len(rows))
         for row in rows:
             data = []
             # position
@@ -163,16 +162,16 @@ def scrape_new_race_results(driver):
     with open('./parkrun/personal_results.csv', 'r') as personal_results:
         personal_results_reader = csv.reader(personal_results)
         for result in personal_results_reader:
-            race_result_filename = '{}_{}.csv'.format(result[0].lower().replace(' ', '_'), result[4])
+            race_result_filename = '{}_{}.csv'.format(result[0].lower().replace(' ', ''), result[4])
             if not os.path.exists('./parkrun/race_results/{}'.format(race_result_filename)):
-                scrape_results_for_event(result[0], result[3])
+                scrape_results_for_event(driver, result[0], result[3])
 
 
 def scrape_all_personal_race_results(driver):
     with open('./parkrun/personal_results.csv', 'r') as personal_results:
         personal_results_reader = csv.reader(personal_results)
         for result in personal_results_reader:
-            scrape_results_for_event(result[0], result[3])
+            scrape_results_for_event(driver, result[0], result[3])
 
 
 def scrape_all_race_results_in_period(driver, event_name, start_date, end_date):
@@ -204,7 +203,7 @@ def scrape_all_race_results_in_period(driver, event_name, start_date, end_date):
 
     # open event results page
 
-    driver.get('https://www.parkrun.org.uk/{}/results/eventhistory/'.format(event_name))
+    driver.get('https://www.parkrun.org.uk/{}/results/eventhistory/'.format(event_name.lower().replace(' ', '')))
 
     # get all date elements first - quicker than searching DOM for dates
     date_elements = driver.find_elements_by_xpath('//table/tbody/tr/td/div/a')
@@ -221,4 +220,9 @@ def scrape_all_race_results_in_period(driver, event_name, start_date, end_date):
     LOGGER.debug(saturday_urls)
 
     for url in saturday_urls:
-        scrape_results_for_event(event_name, url)
+        scrape_results_for_event(driver, event_name, url)
+
+
+scrape_all_race_results_in_period(webdriver.Firefox(), 'doddington hall', '01/01/2020', '31/12/2020')
+# scrape_personal_results(driver,'1839227')
+# scrape_new_race_results(driver)
